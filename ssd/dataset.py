@@ -15,10 +15,11 @@ Fruit-Fresh-and-Rooten-Detection/
 """
 
 import os
+import random
 import torch
 from PIL import Image
 from pycocotools.coco import COCO
-from torchvision import transforms as T
+from torchvision.transforms import functional as F
 
 
 # -----------------------------
@@ -97,7 +98,55 @@ class FruitDataset(torch.utils.data.Dataset):
         }
 
         if self.transforms is not None:
-            image = self.transforms(image)
+            image, target = self.transforms(image, target)
+
+        return image, target
+
+
+# -----------------------------
+# 自定义 transform：需要同时接收 image 和 target，
+# 因为水平翻转图片时，boxes 的 x 坐标也必须跟着镜像，
+# 不能像标准 torchvision transforms 那样只处理 image。
+# -----------------------------
+class ComposeDouble:
+    """依次执行一组同时处理 (image, target) 的transform"""
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, image, target):
+        for t in self.transforms:
+            image, target = t(image, target)
+        return image, target
+
+
+class ToTensorDouble:
+    """把 PIL Image 转成 Tensor，target 原样返回（boxes坐标不受影响）"""
+    def __call__(self, image, target):
+        image = F.to_tensor(image)
+        return image, target
+
+
+class RandomHorizontalFlipDouble:
+    """
+    以给定概率对图片做水平翻转，并同步翻转 boxes 的 x 坐标。
+    boxes 格式为 [xmin, ymin, xmax, ymax]，图片宽度为 width 时：
+    新的 xmin = width - 旧xmax
+    新的 xmax = width - 旧xmin
+    """
+    def __init__(self, prob=0.5):
+        self.prob = prob
+
+    def __call__(self, image, target):
+        if random.random() < self.prob:
+            width, _ = image.size  # PIL Image: (width, height)
+            image = F.hflip(image)
+
+            boxes = target["boxes"]
+            if boxes.numel() > 0:
+                new_boxes = boxes.clone()
+                new_boxes[:, 0] = width - boxes[:, 2]  # new xmin = width - old xmax
+                new_boxes[:, 2] = width - boxes[:, 0]  # new xmax = width - old xmin
+                target["boxes"] = new_boxes
 
         return image, target
 
@@ -105,16 +154,18 @@ class FruitDataset(torch.utils.data.Dataset):
 def get_transform(train: bool):
     """
     baseline数据增强:
-    - train: 水平翻转(概率0.5) + ToTensor
-    - valid/test: 只做 ToTensor（保持原始状态用于公平评估）
-
-    注意：torchvision的SSD训练要求transform只处理image本身（不动boxes），
-    因为boxes的翻转需要跟image同步处理。这里为了保持baseline简单，
-    先只用ToTensor，等pipeline跑通后如果需要翻转增强，
-    需要换成同时处理image+target的自定义transform（避免boxes和图片不同步）。
+    - train: 水平翻转(概率0.5，同步翻转boxes坐标) + ToTensor
+    - valid/test: 只做 ToTensor（保持原始状态用于公平评估，不做增强）
     """
-    transform_list = [T.ToTensor()]
-    return T.Compose(transform_list)
+    if train:
+        transform_list = [
+            RandomHorizontalFlipDouble(prob=0.5),
+            ToTensorDouble(),
+        ]
+    else:
+        transform_list = [ToTensorDouble()]
+
+    return ComposeDouble(transform_list)
 
 
 def collate_fn(batch):
@@ -128,10 +179,10 @@ def collate_fn(batch):
 if __name__ == "__main__":
     # 简单自测：确认Dataset能正常读取，不报错
     dataset = FruitDataset(root_dir="../data", split="train", transforms=get_transform(train=True))
-    print(f"Number of Dataset Image: {len(dataset)}")
+    print(f"训练集图片数量: {len(dataset)}")
 
     image, target = dataset[0]
-    print(f"Image tensor shape: {image.shape}")
+    print(f"图片tensor shape: {image.shape}")
     print(f"boxes: {target['boxes']}")
     print(f"labels: {target['labels']}")
-    print(f"labels corresponding names: {[CATEGORY_ID_TO_NAME[l.item()] for l in target['labels']]}")
+    print(f"labels对应名称: {[CATEGORY_ID_TO_NAME[l.item()] for l in target['labels']]}")
