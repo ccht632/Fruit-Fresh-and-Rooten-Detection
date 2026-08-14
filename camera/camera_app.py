@@ -1,75 +1,44 @@
 """
 camera_app.py
 
-用训练好的YOLOv8模型，通过摄像头实时检测水果，
-判断是Fresh还是Rotten，并在画面上画框+显示标签+置信度。
+团队共用的摄像头demo统一入口。
+通过 --model 参数选择用SSD还是YOLO做检测，
+两套实现各自独立成文件（camera_app_ssd.py / camera_app_yolo.py），
+避免两套依赖库（torchvision vs ultralytics）互相干扰，也避免多人同时改一个文件造成git冲突。
 
 用法：
-    python camera_app.py
-
-按 'q' 退出。
+    python camera_app.py --model ssd
+    python camera_app.py --model yolo
 """
 
-import cv2
-from ultralytics import YOLO
+import argparse
+import subprocess
+import sys
+import os
 
-# ---------------- 配置区，按你实际路径改 ----------------
-MODEL_PATH = r"C:\Users\Cht632\Asgmnt RSW\RSWY2S1\AI - Fresh and Rooten Fruit Classification\runs\detect\fruit_yolo\fruit_freshness_v1\weights\best.pt"
-CAMERA_INDEX = 0  # 0 = 电脑默认摄像头。如果没有摄像头，可以改成一个视频文件路径，比如 r"test_video.mp4"
-CONFIDENCE_THRESHOLD = 0.5
-# ---------------------------------------------------------
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def main():
-    print("Loading model...")
-    model = YOLO(MODEL_PATH)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", type=str, choices=["ssd", "yolo"], required=True,
+                         help="选择用哪个模型做实时检测")
+    # 其余参数直接透传给对应脚本（比如 --threshold, --nms-thresh 等）
+    args, extra_args = parser.parse_known_args()
 
-    print(f"Opening camera (index {CAMERA_INDEX})...")
-    cap = cv2.VideoCapture(CAMERA_INDEX)
+    if args.model == "ssd":
+        target_script = os.path.join(SCRIPT_DIR, "camera_app_ssd.py")
+    else:
+        target_script = os.path.join(SCRIPT_DIR, "camera_app_yolo.py")
 
-    if not cap.isOpened():
-        print("ERROR: Could not open camera/video source.")
-        print("If you don't have a webcam, change CAMERA_INDEX to a video file path instead.")
+    if not os.path.exists(target_script):
+        print(f"⚠️ 找不到脚本: {target_script}")
         return
 
-    print("Starting real-time detection. Press 'q' to quit.")
-
-    last_annotated_frame = None
-    frames_since_detection = 0
-    MAX_FRAMES_TO_HOLD = 5  # 没检测到的时候，最多保留之前的框几帧，减少闪烁
-
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            print("End of video / camera feed lost.")
-            break
-
-        # 跑YOLO检测
-        results = model(frame, conf=CONFIDENCE_THRESHOLD, verbose=False)
-
-        has_detection = len(results[0].boxes) > 0
-
-        if has_detection:
-            annotated_frame = results[0].plot()
-            last_annotated_frame = annotated_frame
-            frames_since_detection = 0
-        else:
-            # 没检测到，短暂保留上一次的画面，避免闪烁
-            if last_annotated_frame is not None and frames_since_detection < MAX_FRAMES_TO_HOLD:
-                annotated_frame = last_annotated_frame
-                frames_since_detection += 1
-            else:
-                annotated_frame = frame
-                last_annotated_frame = None
-
-        cv2.imshow("Fruit Freshness Detector (Press 'q' to quit)", annotated_frame)
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
-    print("Camera closed.")
+    # 用subprocess调用对应脚本，而不是直接import，
+    # 这样即使当前环境没装ultralytics（或没装torch），
+    # 只要没选到那个模型，就不会因为import失败而报错
+    subprocess.run([sys.executable, target_script] + extra_args)
 
 
 if __name__ == "__main__":
