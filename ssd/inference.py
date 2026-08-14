@@ -25,34 +25,48 @@ def get_box_color(category_id: int):
     return "lime" if name.startswith("Fresh") else "red"
 
 
-def load_model(checkpoint_path, device):
+def load_model(checkpoint_path, device, nms_thresh=None):
     model = get_model(num_classes=NUM_CLASSES)
     model.load_state_dict(torch.load(checkpoint_path, map_location=device))
     model.to(device)
     model.eval()
+
+    if nms_thresh is not None:
+        # nms_thresh 是模型的普通属性（默认0.45），推理时可以直接覆盖，
+        # 不需要重新训练。数值越小，NMS去重越激进（重叠框更容易被合并成一个）。
+        model.nms_thresh = nms_thresh
+        print(f"已将 nms_thresh 覆盖为: {nms_thresh} (默认值0.45)")
+
     return model
 
 
 @torch.no_grad()
-def predict(model, image_path, device, score_threshold=0.5):
+def predict_image(model, image, device, score_threshold=0.5):
     """
-    对单张图片做推理，返回过滤掉低置信度框之后的结果
+    核心推理逻辑：接收一个已经打开的PIL Image（而不是文件路径），
+    这样摄像头视频流的每一帧也能直接调用这个函数，不需要先存成文件再读。
     """
-    image = Image.open(image_path).convert("RGB")
     image_tensor = F.to_tensor(image).to(device)
-
     output = model([image_tensor])[0]
 
     boxes = output["boxes"].cpu()
     labels = output["labels"].cpu()
     scores = output["scores"].cpu()
 
-    # 过滤掉低置信度的预测框
     keep = scores >= score_threshold
     boxes = boxes[keep]
     labels = labels[keep]
     scores = scores[keep]
 
+    return boxes, labels, scores
+
+
+def predict(model, image_path, device, score_threshold=0.5):
+    """
+    对单张图片文件做推理，读取文件后调用 predict_image()
+    """
+    image = Image.open(image_path).convert("RGB")
+    boxes, labels, scores = predict_image(model, image, device, score_threshold)
     return image, boxes, labels, scores
 
 
@@ -90,12 +104,15 @@ def main():
     parser.add_argument("--image", type=str, required=True, help="输入图片路径")
     parser.add_argument("--checkpoint", type=str, default="ssd_fruit_model.pth")
     parser.add_argument("--threshold", type=float, default=0.5, help="置信度阈值，低于此值的预测框会被过滤掉")
+    parser.add_argument("--nms-thresh", type=float, default=None,
+                         help="NMS去重阈值，默认使用模型自带的0.45。数值越小，重叠框越容易被合并成一个，"
+                              "可以用来改善多个同类水果紧贴在一起时框重叠的问题")
     parser.add_argument("--output", type=str, default="prediction_result.jpg")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = load_model(args.checkpoint, device)
+    model = load_model(args.checkpoint, device, nms_thresh=args.nms_thresh)
     image, boxes, labels, scores = predict(model, args.image, device, score_threshold=args.threshold)
 
     print(f"检测到 {len(boxes)} 个水果 (阈值={args.threshold}):")
