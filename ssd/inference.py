@@ -14,6 +14,7 @@ import argparse
 import torch
 from PIL import Image, ImageDraw, ImageFont
 from torchvision.transforms import functional as F
+from torchvision.ops import nms
 
 from dataset import NUM_CLASSES, CATEGORY_ID_TO_NAME
 from model import get_model
@@ -41,10 +42,18 @@ def load_model(checkpoint_path, device, nms_thresh=None):
 
 
 @torch.no_grad()
-def predict_image(model, image, device, score_threshold=0.5):
+def predict_image(model, image, device, score_threshold=0.5, class_agnostic_nms_thresh=0.5):
     """
     核心推理逻辑：接收一个已经打开的PIL Image（而不是文件路径），
     这样摄像头视频流的每一帧也能直接调用这个函数，不需要先存成文件再读。
+
+    class_agnostic_nms_thresh:
+        torchvision SSD内部的NMS是"分类别"做的，如果同一个物理位置
+        (比如一颗腐烂橙子)被同时判断成"Rotten Orange"和"Rotten Banana"
+        且都超过置信度阈值，两个框不会互相去重，会同时显示。
+        这里额外做一次"跨类别"的NMS，把物理位置高度重叠的框，
+        只保留置信度最高的那一个，其余（不管是什么类别标签）都丢弃。
+        设为 None 可以关闭这个后处理，恢复模型原始输出。
     """
     image_tensor = F.to_tensor(image).to(device)
     output = model([image_tensor])[0]
@@ -58,15 +67,24 @@ def predict_image(model, image, device, score_threshold=0.5):
     labels = labels[keep]
     scores = scores[keep]
 
+    if class_agnostic_nms_thresh is not None and len(boxes) > 0:
+        # nms()本身不看类别标签，只看boxes+scores，天然就是"跨类别"去重
+        keep_idx = nms(boxes, scores, iou_threshold=class_agnostic_nms_thresh)
+        boxes = boxes[keep_idx]
+        labels = labels[keep_idx]
+        scores = scores[keep_idx]
+
     return boxes, labels, scores
 
 
-def predict(model, image_path, device, score_threshold=0.5):
+def predict(model, image_path, device, score_threshold=0.5, class_agnostic_nms_thresh=0.5):
     """
     对单张图片文件做推理，读取文件后调用 predict_image()
     """
     image = Image.open(image_path).convert("RGB")
-    boxes, labels, scores = predict_image(model, image, device, score_threshold)
+    boxes, labels, scores = predict_image(
+        model, image, device, score_threshold, class_agnostic_nms_thresh
+    )
     return image, boxes, labels, scores
 
 
@@ -107,13 +125,22 @@ def main():
     parser.add_argument("--nms-thresh", type=float, default=None,
                          help="NMS去重阈值，默认使用模型自带的0.45。数值越小，重叠框越容易被合并成一个，"
                               "可以用来改善多个同类水果紧贴在一起时框重叠的问题")
+    parser.add_argument("--agnostic-nms-thresh", type=float, default=0.5,
+                         help="跨类别NMS阈值，解决同一物理位置被不同类别(如Rotten Orange和Rotten Banana)"
+                              "同时检测的问题。数值越小去重越激进。设为负数(如-1)可关闭此后处理")
     parser.add_argument("--output", type=str, default="prediction_result.jpg")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    agnostic_thresh = args.agnostic_nms_thresh if args.agnostic_nms_thresh >= 0 else None
+
     model = load_model(args.checkpoint, device, nms_thresh=args.nms_thresh)
-    image, boxes, labels, scores = predict(model, args.image, device, score_threshold=args.threshold)
+    image, boxes, labels, scores = predict(
+        model, args.image, device,
+        score_threshold=args.threshold,
+        class_agnostic_nms_thresh=agnostic_thresh,
+    )
 
     print(f"检测到 {len(boxes)} 个水果 (阈值={args.threshold}):")
     for label, score in zip(labels, scores):

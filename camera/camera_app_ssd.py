@@ -61,6 +61,9 @@ def main():
     parser.add_argument("--threshold", type=float, default=0.5, help="置信度阈值")
     parser.add_argument("--nms-thresh", type=float, default=0.2,
                          help="NMS去重阈值，默认0.2（经测试对紧贴水果的框重叠问题有改善，同时不影响独立水果的检测）")
+    parser.add_argument("--agnostic-nms-thresh", type=float, default=0.5,
+                         help="跨类别NMS阈值，解决同一物理位置被不同类别(如Rotten Orange和Rotten Banana)"
+                              "同时检测的问题。设为负数(如-1)可关闭此后处理")
     parser.add_argument("--camera-index", type=int, default=0, help="摄像头设备编号，通常0是默认摄像头")
     parser.add_argument("--skip-frames", type=int, default=2,
                          help="每隔多少帧重新推理一次，数值越大画面越流畅但检测框更新越慢（CPU推理建议保留>=2）")
@@ -68,6 +71,8 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"使用设备: {device}")
+
+    agnostic_thresh = args.agnostic_nms_thresh if args.agnostic_nms_thresh >= 0 else None
 
     model = load_model(args.checkpoint, device, nms_thresh=args.nms_thresh)
 
@@ -97,7 +102,9 @@ def main():
             pil_image = Image.fromarray(frame_rgb)
 
             last_boxes, last_labels, last_scores = predict_image(
-                model, pil_image, device, score_threshold=args.threshold
+                model, pil_image, device,
+                score_threshold=args.threshold,
+                class_agnostic_nms_thresh=agnostic_thresh,
             )
 
         frame = draw_on_frame(frame, last_boxes, last_labels, last_scores)
