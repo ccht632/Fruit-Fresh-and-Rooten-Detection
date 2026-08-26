@@ -4,6 +4,7 @@ pillow==12.3.0
 matplotlib==3.11.1
 opencv-python==5.0.0.93
 PyYAML==6.0.3
+streamlit==1.62.0
 
 # ---- SSD (ssd/) ----
 torch==2.13.0

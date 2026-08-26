@@ -106,10 +106,20 @@ python camera_app.py --model ssd     # or --model yolo
 
 # Additional arguments supported on the YOLO side (passed through to camera_app_yolo.py):
 python camera_app.py --model yolo --threshold 0.3    # lower the threshold on the spot to check for missed detections
-python camera_app.py --model yolo --no-blur          # disable background blur (a display-only effect, does not affect detection results)
 ```
 
 `camera_app.py` is the unified entry point, dispatching to `camera_app_ssd.py` / `camera_app_yolo.py` based on the `--model` argument. Their dependencies (torchvision vs ultralytics) are kept independent, so both environments don't need to be installed at once to run either one.
+
+## Web UI demo (`camera/streamlit_app.py`)
+
+A Streamlit page as an alternative to the live camera feed above: upload a photo (or take one with your device camera), pick SSD300-VGG16 or YOLOv8n, and view the detection result with bounding boxes and per-detection confidence scores.
+
+```
+cd camera
+streamlit run streamlit_app.py
+```
+
+Needs both `ssd/ssd_fruit_model.pth` and the trained YOLO weights (`runs/detect/fruit_yolo/fruit_freshness_v1/weights/best.pt`) present, since either model can be picked from the page.
 
 ## Results comparison
 
