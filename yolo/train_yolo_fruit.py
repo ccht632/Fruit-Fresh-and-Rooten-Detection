@@ -1,66 +1,94 @@
 """
 train_yolo_fruit.py
 
-训练 YOLOv8 模型，检测水果新鲜/腐烂状态。
-本版本适合本地 VS Code 运行（CPU或本地GPU），已加入多项防止过拟合的措施。
+Trains a YOLOv8 model to detect fruit freshness/rottenness.
+This version is meant to be run locally in VS Code (CPU or local GPU), and
+includes several measures to reduce overfitting.
 
-使用方法：
-    1. 确认数据集文件夹（含 data.yaml）已经在项目里
-    2. 运行这个脚本
+Usage:
+    1. Make sure the dataset folder (containing data.yaml) is already in the project
+    2. Run this script
 
-运行:
+Run:
     python train_yolo_fruit.py
+    python train_yolo_fruit.py --data-yaml "D:\\xxx\\data.yaml"   # specify if the dataset is not in the default location
 """
 
+import argparse
 import os
 from ultralytics import YOLO
 
-# ---------------- 配置区，按你实际路径改 ----------------
-DATA_YAML = r"C:\Users\Cht632\Asgmnt RSW\RSWY2S1\AI - Fresh and Rooten Fruit Classification\data\fresh and rotten fruits.v3i.yolov8\data.yaml"  
-EPOCHS = 100
-IMG_SIZE = 640
-BATCH_SIZE = 16
-PROJECT_NAME = "fruit_yolo"
-RUN_NAME = "fruit_freshness_v1"
-# ---------------------------------------------------------
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Default path is computed relative to this file's location (yolo/ and data/ are sibling folders),
+# so no code changes are needed when switching computers or usernames
+DEFAULT_DATA_YAML = os.path.join(
+    SCRIPT_DIR, "..", "data", "fresh and rotten fruits.v3i.yolov8", "data.yaml"
+)
 
 
-def train():
-    model = YOLO("yolov8n.pt")  # 预训练权重作为起点，比从零训练快、也更不容易过拟合
+def train(data_yaml, epochs, img_size, batch_size, project_name, run_name):
+    if not os.path.exists(data_yaml):
+        raise FileNotFoundError(
+            f"data.yaml not found: {data_yaml}\n"
+            f"Check whether the dataset has been downloaded into the data/ folder, "
+            f"or use --data-yaml to point to the actual path"
+        )
+
+    model = YOLO("yolov8n.pt")  # start from pretrained weights, faster and less prone to overfitting than training from scratch
 
     results = model.train(
-        data=DATA_YAML,
-        epochs=EPOCHS,
-        imgsz=IMG_SIZE,
-        batch=BATCH_SIZE,
-        project=PROJECT_NAME,
-        name=RUN_NAME,
+        data=data_yaml,
+        epochs=epochs,
+        imgsz=img_size,
+        batch=batch_size,
+        project=project_name,
+        name=run_name,
 
-        # ---- 防止过拟合的设置 ----
-        patience=20,           # Early stopping：20轮没进步就自动停止，不让模型继续"死记硬背"
-        dropout=0.2,            # Dropout：训练时随机丢弃部分神经元，逼模型学通用规律而不是记细节
-        weight_decay=0.0005,    # 权重衰减：给参数加一点"惩罚"，防止某些权重变得过大、过度拟合训练数据
+        # ---- overfitting-prevention settings ----
+        patience=20,             # early stopping: stop automatically after 20 epochs with no improvement, to stop the model from "memorising" the training set
+        dropout=0.2,              # dropout: randomly drop some neurons during training, forcing the model to learn general patterns rather than memorising details
+        weight_decay=0.0005,      # weight decay: penalises overly large weights, reducing overfitting to the training data
 
-        # ---- 数据增强（进一步降低过拟合风险，让模型见到更多变化） ----
-        hsv_h=0.015,             # 随机调整色调
-        hsv_s=0.7,               # 随机调整饱和度（水果新鲜/腐烂很大程度靠颜色判断，这个要保留但别调太猛，避免颜色失真影响fresh/rotten这个关键特征）
-        hsv_v=0.4,               # 随机调整亮度
-        fliplr=0.5,               # 50%概率水平翻转
-        flipud=0.0,               # 不做上下翻转（水果一般不会颠倒着放，没必要）
-        degrees=15,               # 随机旋转角度（呼应数据集本身已有的±15度增强）
-        translate=0.1,             # 随机平移
-        scale=0.5,                 # 随机缩放
+        # ---- data augmentation (further reduces overfitting risk by exposing the model to more variation) ----
+        hsv_h=0.015,               # random hue jitter
+        hsv_s=0.7,                 # random saturation jitter (freshness/rottenness relies heavily on colour, so this is kept but not too strong, to avoid distorting the key fresh/rotten colour cue)
+        hsv_v=0.4,                 # random brightness jitter
+        fliplr=0.5,                 # 50% chance of horizontal flip
+        flipud=0.0,                 # no vertical flip (fruit is not normally placed upside down, so this is unnecessary)
+        degrees=15,                 # random rotation angle (matches the +/-15 degree augmentation already present in the dataset)
+        translate=0.1,               # random translation
+        scale=0.5,                   # random scaling
 
         save=True,
-        save_period=5,             # 每5个epoch保存一次检查点，避免中途出问题全部白费
+        save_period=5,               # save a checkpoint every 5 epochs, so progress is not lost if something goes wrong mid-training
     )
 
     print("Training done.")
-    best_model_path = os.path.join(PROJECT_NAME, RUN_NAME, "weights", "best.pt")
+    best_model_path = os.path.join(project_name, run_name, "weights", "best.pt")
     print(f"Best model saved at: {best_model_path}")
+    return results
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data-yaml", type=str, default=DEFAULT_DATA_YAML,
+                         help="Path to the dataset's data.yaml")
+    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--img-size", type=int, default=640)
+    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--project-name", type=str, default="fruit_yolo")
+    parser.add_argument("--run-name", type=str, default="fruit_freshness_v1")
+    args = parser.parse_args()
+
+    try:
+        train(args.data_yaml, args.epochs, args.img_size, args.batch_size,
+              args.project_name, args.run_name)
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}")
+    except Exception as e:
+        print(f"ERROR: training failed: {e}")
+        raise
+
 
 if __name__ == "__main__":
-    train()
-
-if __name__ == "__main__":
-    train()
+    main()

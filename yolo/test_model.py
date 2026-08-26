@@ -1,31 +1,58 @@
 """
 test_model.py
 
-用训练好的YOLOv8模型，对整个test文件夹的图片做批量检测，
-并把检测结果（画好框+标签的图片）保存到本地文件夹，方便逐张查看。
+Runs the trained YOLOv8 model on every image in the test folder as a batch,
+and saves the annotated (boxes + labels) results to a local folder for review.
 
-用法：
+Usage:
     python test_model.py
+    python test_model.py --confidence 0.3
 """
+
+import argparse
+import os
 
 from ultralytics import YOLO
 
-# ---------------- 配置区，按你实际路径改 ----------------
-MODEL_PATH = r"C:\Users\Cht632\Asgmnt RSW\RSWY2S1\AI - Fresh and Rooten Fruit Classification\runs\detect\fruit_yolo\fruit_freshness_v1\weights\best.pt"
-TEST_IMAGES_DIR = r"C:\Users\Cht632\Asgmnt RSW\RSWY2S1\AI - Fresh and Rooten Fruit Classification\data\fresh and rotten fruits.v3i.yolov8\test\images"
-CONFIDENCE_THRESHOLD = 0.5  # 置信度阈值，低于这个不显示（可以调整）
-# ---------------------------------------------------------
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Default paths are computed relative to this file's location, so no code changes
+# are needed when switching computers or usernames
+DEFAULT_MODEL_PATH = os.path.join(
+    SCRIPT_DIR, "..", "runs", "detect", "fruit_yolo", "fruit_freshness_v1", "weights", "best.pt"
+)
+DEFAULT_TEST_IMAGES_DIR = os.path.join(
+    SCRIPT_DIR, "..", "data", "fresh and rotten fruits.v3i.yolov8", "test", "images"
+)
 
 
 def main():
-    print(f"Loading model from: {MODEL_PATH}")
-    model = YOLO(MODEL_PATH)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model-path", type=str, default=DEFAULT_MODEL_PATH,
+                         help="Path to the YOLO weights file (best.pt)")
+    parser.add_argument("--test-images-dir", type=str, default=DEFAULT_TEST_IMAGES_DIR,
+                         help="Folder containing the images to run detection on")
+    parser.add_argument("--confidence", type=float, default=0.5,
+                         help="Confidence threshold; detections below this are not shown")
+    args = parser.parse_args()
 
-    print(f"Running detection on all images in: {TEST_IMAGES_DIR}")
+    if not os.path.exists(args.model_path):
+        print(f"ERROR: model file not found: {args.model_path}")
+        print("Use --model-path to point to the actual location of best.pt")
+        return
+
+    if not os.path.isdir(args.test_images_dir):
+        print(f"ERROR: test images folder not found: {args.test_images_dir}")
+        print("Use --test-images-dir to point to the actual location")
+        return
+
+    print(f"Loading model from: {args.model_path}")
+    model = YOLO(args.model_path)
+
+    print(f"Running detection on all images in: {args.test_images_dir}")
     results = model.predict(
-        source=TEST_IMAGES_DIR,
-        conf=CONFIDENCE_THRESHOLD,
-        save=True,        # 自动保存画好框的结果图片
+        source=args.test_images_dir,
+        conf=args.confidence,
+        save=True,        # automatically save the annotated result images
         show_labels=True,
         show_conf=True,
     )
@@ -35,10 +62,10 @@ def main():
     print("Check the terminal output above for the exact save location")
     print('(usually something like: runs\\detect\\predict\\)')
 
-    # 打印每张图检测到的结果摘要
+    # Print a detection summary for each image
     print("\n--- Detection Summary ---")
     for r in results:
-        image_name = r.path.split("\\")[-1]
+        image_name = os.path.basename(r.path)
         print(f"\n📷 {image_name}")
 
         if len(r.boxes) == 0:
@@ -47,7 +74,7 @@ def main():
             for i, box in enumerate(r.boxes, start=1):
                 class_id = int(box.cls)
                 class_name = model.names[class_id]
-                confidence = float(box.conf) * 100  # 转成百分比更直观
+                confidence = float(box.conf) * 100  # convert to a percentage for readability
                 print(f"   Fruit {i}: {class_name} — Confidence: {confidence:.1f}%")
 
 

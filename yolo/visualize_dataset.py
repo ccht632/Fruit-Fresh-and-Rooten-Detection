@@ -1,13 +1,16 @@
 """
 visualize_dataset.py
 
-从YOLO格式的训练数据里，随机抽样几张图片，画出标注框+类别名字，
-用于人工核对标注是否正确（框的位置、类别是否匹配）。
+Randomly samples a few images from the YOLO-format training data and draws
+their annotation boxes and class names, for manually checking that the
+annotations (box position, class match) are correct.
 
-用法：
+Usage:
     python visualize_dataset.py
+    python visualize_dataset.py --split test --num-samples 10
 """
 
+import argparse
 import os
 import random
 import glob
@@ -16,11 +19,12 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from PIL import Image
 
-# ---------------- 配置区，按你实际路径改 ----------------
-DATA_YAML = r"C:\Users\Cht632\Asgmnt RSW\RSWY2S1\AI - Fresh and Rooten Fruit Classification\data\fresh and rotten fruits.v3i.yolov8\data.yaml"
-SPLIT = "valid"  # 检查哪个部分：train / valid / test
-NUM_SAMPLES = 6  # 随机抽几张
-# ---------------------------------------------------------
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Default path is computed relative to this file's location, so no code changes
+# are needed when switching computers or usernames
+DEFAULT_DATA_YAML = os.path.join(
+    SCRIPT_DIR, "..", "data", "fresh and rotten fruits.v3i.yolov8", "data.yaml"
+)
 
 
 def load_class_names(data_yaml_path):
@@ -71,7 +75,7 @@ def visualize_samples(pairs, class_names, num_samples=6):
             class_id = int(parts[0])
             x_center, y_center, box_w, box_h = map(float, parts[1:])
 
-            # YOLO格式是比例坐标(0-1)，需要转换成实际像素坐标
+            # YOLO format uses normalised coordinates (0-1), need to convert to actual pixel coordinates
             xmin = (x_center - box_w / 2) * img_w
             ymin = (y_center - box_h / 2) * img_h
             width = box_w * img_w
@@ -93,7 +97,7 @@ def visualize_samples(pairs, class_names, num_samples=6):
         ax.set_title(os.path.basename(img_path))
         ax.axis("off")
 
-    # 隐藏多余的空subplot
+    # hide any unused empty subplots
     for ax in axes[len(samples):]:
         ax.axis("off")
 
@@ -101,14 +105,31 @@ def visualize_samples(pairs, class_names, num_samples=6):
     plt.show()
 
 
-if __name__ == "__main__":
-    class_names = load_class_names(DATA_YAML)
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data-yaml", type=str, default=DEFAULT_DATA_YAML,
+                         help="Path to the dataset's data.yaml")
+    parser.add_argument("--split", type=str, default="valid", choices=["train", "valid", "test"],
+                         help="Which split to check")
+    parser.add_argument("--num-samples", type=int, default=6, help="Number of samples to draw")
+    args = parser.parse_args()
+
+    if not os.path.exists(args.data_yaml):
+        print(f"ERROR: data.yaml not found: {args.data_yaml}")
+        print("Use --data-yaml to point to the actual path")
+        return
+
+    class_names = load_class_names(args.data_yaml)
     print(f"Classes: {class_names}")
 
-    pairs = find_image_label_pairs(DATA_YAML, SPLIT)
-    print(f"Found {len(pairs)} image-label pairs in '{SPLIT}' split")
+    pairs = find_image_label_pairs(args.data_yaml, args.split)
+    print(f"Found {len(pairs)} image-label pairs in '{args.split}' split")
 
     if len(pairs) == 0:
-        print("WARNING: No image-label pairs found. Check your DATA_YAML and SPLIT paths.")
+        print("WARNING: No image-label pairs found. Check your --data-yaml and --split.")
     else:
-        visualize_samples(pairs, class_names, num_samples=NUM_SAMPLES)
+        visualize_samples(pairs, class_names, num_samples=args.num_samples)
+
+
+if __name__ == "__main__":
+    main()
