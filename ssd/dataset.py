@@ -20,6 +20,7 @@ import torch
 from PIL import Image
 from pycocotools.coco import COCO
 from torchvision.transforms import functional as F
+from torchvision.transforms import ColorJitter
 
 
 # -----------------------------
@@ -37,6 +38,12 @@ CATEGORY_ID_TO_NAME = {
 }
 # 训练用的 label 数量 = 6个真实类别 + 1个 background(id=0，torchvision SSD保留给背景)
 NUM_CLASSES = len(CATEGORY_ID_TO_NAME) + 1  # = 7
+
+# category_id -> 水果种类（不分fresh/rotten），用于识别"多水果同框"的图片
+CATEGORY_ID_TO_BASE_FRUIT = {
+    1: "Apple", 2: "Banana", 3: "Orange",
+    4: "Banana", 5: "Orange", 6: "Apple",
+}
 
 
 class FruitDataset(torch.utils.data.Dataset):
@@ -103,6 +110,28 @@ class FruitDataset(torch.utils.data.Dataset):
         return image, target
 
 
+def get_multi_fruit_flags(dataset: "FruitDataset"):
+    """
+    返回一个长度为 len(dataset) 的 bool 列表，标记每张图片是否同时包含
+    >=2 种不同水果（不区分fresh/rotten，比如同时有apple和orange就算）。
+
+    诊断发现这类"多水果同框"图片在train set里占比很低(~2%)，且几乎都来自
+    同一批底图的翻转/旋转复制，训练时对它们的曝光次数太少，是apple/orange
+    同框互相误检、banana在三果同框场景下检测差这两个问题的共同根因之一。
+    train.py 用这个函数的结果构造 WeightedRandomSampler，对这批图片做过采样。
+    """
+    flags = []
+    for image_id in dataset.image_ids:
+        ann_ids = dataset.coco.getAnnIds(imgIds=image_id)
+        anns = dataset.coco.loadAnns(ann_ids)
+        base_fruits = {
+            CATEGORY_ID_TO_BASE_FRUIT[ann["category_id"]]
+            for ann in anns if ann["category_id"] != 0
+        }
+        flags.append(len(base_fruits) >= 2)
+    return flags
+
+
 # -----------------------------
 # 自定义 transform：需要同时接收 image 和 target，
 # 因为水平翻转图片时，boxes 的 x 坐标也必须跟着镜像，
@@ -151,15 +180,98 @@ class RandomHorizontalFlipDouble:
         return image, target
 
 
+class RandomScaleCropDouble:
+    """
+    以给定概率随机裁剪图片的一个子区域(保留原图 scale_range 比例的宽高)，
+    并同步裁剪/过滤 boxes 坐标。
+
+    诊断发现：训练集里 rotten apple/orange 的框普遍占满画面(~70-77%面积)，
+    而fresh apple/orange的框普遍较小(~27-28%面积)——这是采集时留下的偏差，
+    模型很容易学到"画面里橙色/苹果色区域占比大 => rotten"这种shortcut，
+    而不是真正学斑点、褶皱等新鲜度纹理特征。这个transform随机改变同一个
+    物体在画面里的占比，用来打破"占比"和"新鲜度标签"之间的伪相关。
+
+    scale_range=(0.7, 1.0) 是保守设置：每次裁剪保留原图70%~100%的宽高，
+    幅度不大，避免破坏图片内容或过度拖慢收敛。
+    """
+    def __init__(self, prob=0.5, scale_range=(0.7, 1.0), min_box_keep_ratio=0.3):
+        self.prob = prob
+        self.scale_range = scale_range
+        self.min_box_keep_ratio = min_box_keep_ratio
+
+    def __call__(self, image, target):
+        if random.random() >= self.prob:
+            return image, target
+
+        width, height = image.size
+        scale = random.uniform(*self.scale_range)
+        crop_w = max(1, int(width * scale))
+        crop_h = max(1, int(height * scale))
+
+        crop_x = random.randint(0, width - crop_w)
+        crop_y = random.randint(0, height - crop_h)
+
+        boxes = target["boxes"]
+        labels = target["labels"]
+
+        if boxes.numel() == 0:
+            return image, target
+
+        # 把boxes坐标裁剪到新窗口范围内，再平移到新窗口的局部坐标系
+        new_boxes = boxes.clone()
+        new_boxes[:, [0, 2]] = new_boxes[:, [0, 2]].clamp(crop_x, crop_x + crop_w) - crop_x
+        new_boxes[:, [1, 3]] = new_boxes[:, [1, 3]].clamp(crop_y, crop_y + crop_h) - crop_y
+
+        orig_areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+        new_areas = (new_boxes[:, 2] - new_boxes[:, 0]) * (new_boxes[:, 3] - new_boxes[:, 1])
+        # 裁剪后残留面积占原面积太少的box(比如被裁掉了大半)直接丢弃，
+        # 避免训练时看到一个"新鲜度关键纹理都被裁没了"的残缺框
+        keep = (new_areas / orig_areas.clamp(min=1e-6)) >= self.min_box_keep_ratio
+
+        if keep.sum().item() == 0:
+            # 这次裁剪会让所有box都不满足保留条件，放弃裁剪，返回原图
+            return image, target
+
+        image = F.crop(image, crop_y, crop_x, crop_h, crop_w)
+        target = dict(target)
+        target["boxes"] = new_boxes[keep]
+        target["labels"] = labels[keep]
+        return image, target
+
+
+class ColorJitterDouble:
+    """
+    只对图片做颜色扰动(brightness/contrast/saturation/hue)，boxes不受影响。
+
+    诊断发现训练pipeline里完全没有颜色相关的增强，这会让模型倾向于依赖
+    局部颜色小线索去区分fresh apple / fresh orange，泛化性差；同时也让
+    "画面颜色区域占比"这种shortcut(见RandomScaleCropDouble的说明)更容易
+    被学到。hue幅度刻意设得很小(默认0.02)，是为了不抹掉apple(红/绿)和
+    orange(橙)之间本身就该用的合法颜色区分线索，只是让模型对光照/色调的
+    小幅扰动更鲁棒。
+    """
+    def __init__(self, brightness=0.15, contrast=0.15, saturation=0.15, hue=0.02):
+        self.jitter = ColorJitter(brightness=brightness, contrast=contrast, saturation=saturation, hue=hue)
+
+    def __call__(self, image, target):
+        image = self.jitter(image)
+        return image, target
+
+
 def get_transform(train: bool):
     """
-    baseline数据增强:
-    - train: 水平翻转(概率0.5，同步翻转boxes坐标) + ToTensor
-    - valid/test: 只做 ToTensor（保持原始状态用于公平评估，不做增强）
+    train数据增强:
+    - 水平翻转(概率0.5，同步翻转boxes坐标)
+    - 随机scale/crop(概率0.5，同步裁剪boxes坐标，见RandomScaleCropDouble说明)
+    - 颜色扰动(brightness/contrast/saturation/hue，仅作用于图片，见ColorJitterDouble说明)
+    - ToTensor
+    valid/test: 只做 ToTensor（保持原始状态用于公平评估，不做增强）
     """
     if train:
         transform_list = [
             RandomHorizontalFlipDouble(prob=0.5),
+            RandomScaleCropDouble(prob=0.5, scale_range=(0.7, 1.0)),
+            ColorJitterDouble(brightness=0.15, contrast=0.15, saturation=0.15, hue=0.02),
             ToTensorDouble(),
         ]
     else:

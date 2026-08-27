@@ -42,7 +42,7 @@ def load_model(checkpoint_path, device, nms_thresh=None):
 
 
 @torch.no_grad()
-def predict_image(model, image, device, score_threshold=0.5, class_agnostic_nms_thresh=0.5):
+def predict_image(model, image, device, score_threshold=0.5, class_agnostic_nms_thresh=0.8):
     """
     核心推理逻辑：接收一个已经打开的PIL Image（而不是文件路径），
     这样摄像头视频流的每一帧也能直接调用这个函数，不需要先存成文件再读。
@@ -54,6 +54,12 @@ def predict_image(model, image, device, score_threshold=0.5, class_agnostic_nms_
         这里额外做一次"跨类别"的NMS，把物理位置高度重叠的框，
         只保留置信度最高的那一个，其余（不管是什么类别标签）都丢弃。
         设为 None 可以关闭这个后处理，恢复模型原始输出。
+
+        默认值从0.5调高到0.8：诊断发现多水果紧挨/部分遮挡同框时
+        (如banana贴着apple/orange)，不同水果的框IoU也可能达到0.5，
+        0.5的阈值会把置信度较低的那个水果框（比如banana）跨类别抹掉，
+        造成漏检。调到0.8后只去重真正高度重叠的"同一个物体被判成
+        两个类别"的重复框，不再误伤紧挨在一起的不同水果。
     """
     image_tensor = F.to_tensor(image).to(device)
     output = model([image_tensor])[0]
@@ -77,7 +83,7 @@ def predict_image(model, image, device, score_threshold=0.5, class_agnostic_nms_
     return boxes, labels, scores
 
 
-def predict(model, image_path, device, score_threshold=0.5, class_agnostic_nms_thresh=0.5):
+def predict(model, image_path, device, score_threshold=0.5, class_agnostic_nms_thresh=0.8):
     """
     对单张图片文件做推理，读取文件后调用 predict_image()
     """
@@ -125,9 +131,10 @@ def main():
     parser.add_argument("--nms-thresh", type=float, default=None,
                          help="NMS去重阈值，默认使用模型自带的0.45。数值越小，重叠框越容易被合并成一个，"
                               "可以用来改善多个同类水果紧贴在一起时框重叠的问题")
-    parser.add_argument("--agnostic-nms-thresh", type=float, default=0.5,
+    parser.add_argument("--agnostic-nms-thresh", type=float, default=0.8,
                          help="跨类别NMS阈值，解决同一物理位置被不同类别(如Rotten Orange和Rotten Banana)"
-                              "同时检测的问题。数值越小去重越激进。设为负数(如-1)可关闭此后处理")
+                              "同时检测的问题。数值越小去重越激进，但也更容易误伤紧挨在一起的不同水果"
+                              "(比如banana贴着apple/orange)。设为负数(如-1)可关闭此后处理")
     parser.add_argument("--output", type=str, default="prediction_result.jpg")
     args = parser.parse_args()
 

@@ -2,22 +2,40 @@ import argparse
 import time
 
 import torch
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
 
-from dataset import FruitDataset, get_transform, collate_fn, NUM_CLASSES
+from dataset import FruitDataset, get_transform, collate_fn, NUM_CLASSES, get_multi_fruit_flags
 from model import get_model
+
+
+# "多水果同框"图片(如apple+banana+orange同框)在train set里占比很低(~2%)，
+# 且几乎都来自同一批底图的翻转/旋转复制。diagnose发现这类稀有场景正是
+# apple/orange同框互相误检、三果同框banana检测差这两个问题的共同根因之一，
+# 用WeightedRandomSampler对它们做适度过采样，让模型每个epoch多看几次。
+# 倍数保守设置(5倍)，避免在这批底图数量本就很少(~12张)的样本上过拟合。
+MULTI_FRUIT_OVERSAMPLE_WEIGHT = 5.0
 
 
 def get_dataloaders(data_root, batch_size, subset=None, num_workers=0):
     train_dataset = FruitDataset(data_root, split="train", transforms=get_transform(train=True))
     valid_dataset = FruitDataset(data_root, split="valid", transforms=get_transform(train=False))
 
+    multi_fruit_flags = get_multi_fruit_flags(train_dataset)
+
     if subset is not None:
-        train_dataset = Subset(train_dataset, range(min(subset, len(train_dataset))))
+        subset_indices = range(min(subset, len(train_dataset)))
+        multi_fruit_flags = [multi_fruit_flags[i] for i in subset_indices]
+        train_dataset = Subset(train_dataset, subset_indices)
         valid_dataset = Subset(valid_dataset, range(min(subset // 5 + 1, len(valid_dataset))))
 
+    sample_weights = [
+        MULTI_FRUIT_OVERSAMPLE_WEIGHT if is_multi_fruit else 1.0
+        for is_multi_fruit in multi_fruit_flags
+    ]
+    train_sampler = WeightedRandomSampler(sample_weights, num_samples=len(train_dataset), replacement=True)
+
     train_loader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True,
+        train_dataset, batch_size=batch_size, sampler=train_sampler,
         num_workers=num_workers, collate_fn=collate_fn,
     )
     valid_loader = DataLoader(
