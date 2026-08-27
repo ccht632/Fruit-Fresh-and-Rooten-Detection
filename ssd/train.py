@@ -95,9 +95,15 @@ def evaluate_loss(model, data_loader, device, epoch):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-root", type=str, default="../data")
-    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--epochs", type=int, default=40,
+                         help="Upper bound on training epochs; early stopping (--patience) will usually "
+                              "stop training well before this if valid_loss stops improving.")
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--lr", type=float, default=0.001)
+    parser.add_argument("--patience", type=int, default=5,
+                         help="Early stopping patience: stop training if valid_loss hasn't improved for "
+                              "this many consecutive epochs. Prevents wasting compute / overfitting on this "
+                              "small (~2000 image) dataset when --epochs is set high.")
     parser.add_argument("--subset", type=int, default=None,
                          help="Use only the first N images for small-scale testing; otherwise, use all data.")
     parser.add_argument("--output", type=str, default="ssd_fruit_model.pth")
@@ -122,6 +128,7 @@ def main():
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
 
     best_valid_loss = float("inf")
+    epochs_without_improvement = 0
     for epoch in range(1, args.epochs + 1):
         train_loss = train_one_epoch(model, optimizer, train_loader, device, epoch)
         valid_loss = evaluate_loss(model, valid_loader, device, epoch)
@@ -129,8 +136,16 @@ def main():
 
         if valid_loss < best_valid_loss:
             best_valid_loss = valid_loss
+            epochs_without_improvement = 0
             torch.save(model.state_dict(), args.output)
             print(f"  Save the new best model (valid_loss={valid_loss:.4f}) -> {args.output}")
+        else:
+            epochs_without_improvement += 1
+            print(f"  No improvement for {epochs_without_improvement}/{args.patience} epochs "
+                  f"(best valid_loss so far={best_valid_loss:.4f})")
+            if epochs_without_improvement >= args.patience:
+                print(f"Early stopping: valid_loss hasn't improved for {args.patience} consecutive epochs.")
+                break
 
     print("Training Completed.")
 
