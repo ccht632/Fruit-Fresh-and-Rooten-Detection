@@ -1,6 +1,15 @@
 [theme]
-primaryColor = "#2f9fe8"
-backgroundColor = "#f6fafd"
-secondaryBackgroundColor = "#eaf3fa"
-textColor = "#0f2a3d"
-font = "sans serif"
+base = "light"
+primaryColor = "#5f7a52"
+backgroundColor = "#f4efe4"
+secondaryBackgroundColor = "#faf6ec"
+textColor = "#2b2620"
+borderColor = "#e7dfcd"
+linkColor = "#5f7a52"
+baseRadius = "large"
+showWidgetBorder = false
+greenColor = "#5f7a52"
+greenBackgroundColor = "#eef2e7"
+greenTextColor = "#4f6b42"
+redColor = "#c17a56"
+chartCategoricalColors = ["#7c9473", "#c17a56", "#a68a5b", "#5f7a52", "#8a927c", "#9c927e"]
