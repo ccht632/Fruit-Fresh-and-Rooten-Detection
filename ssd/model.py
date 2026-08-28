@@ -6,7 +6,13 @@ from torchvision.models.detection._utils import retrieve_out_channels
 
 def get_model(num_classes: int):
     weights = SSD300_VGG16_Weights.DEFAULT
-    model = ssd300_vgg16(weights=weights)
+    try:
+        model = ssd300_vgg16(weights=weights)
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to build SSD300-VGG16 (this downloads ImageNet-pretrained backbone weights on "
+            f"first use, so it needs internet access): {e}"
+        ) from e
 
     in_channels = retrieve_out_channels(model.backbone, (300, 300))
     num_anchors = model.anchor_generator.num_anchors_per_location()
@@ -28,13 +34,13 @@ if __name__ == "__main__":
     model = get_model(num_classes=NUM_CLASSES)
     model.eval()
 
-    print(f"Model built successfully，num_classes = {NUM_CLASSES}")
+    print(f"Model built successfully, num_classes = {NUM_CLASSES}")
 
     dummy_input = [torch.rand(3, 300, 300)]
     with torch.no_grad():
         output = model(dummy_input)
 
-    print("Forward propagation successful, output structure：")
+    print("Forward pass OK, output shapes:")
     print(f"  boxes shape: {output[0]['boxes'].shape}")
     print(f"  labels shape: {output[0]['labels'].shape}")
     print(f"  scores shape: {output[0]['scores'].shape}")

@@ -1,4 +1,4 @@
-"""Streamlit UI: upload or take a photo, pick a model, see the detection result."""
+# Streamlit UI: upload or take a photo, pick a model, see the detection result.
 
 import os
 import sys
@@ -11,14 +11,14 @@ from PIL import Image, ImageOps
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# ssd/ is a sibling folder, add it to sys.path to import from it
+# ssd/ is a sibling folder
 SSD_DIR = os.path.join(SCRIPT_DIR, "..", "ssd")
 sys.path.insert(0, SSD_DIR)
 
 from inference import load_model as load_ssd_model, predict_image as predict_ssd, draw_predictions  # noqa: E402
 from dataset import CATEGORY_ID_TO_NAME  # noqa: E402
 
-from camera_app_yolo import (  # noqa: E402
+from yolo_inference import (  # noqa: E402
     load_model as load_yolo_model,
     draw_detections,
     DEFAULT_MODEL_PATH as YOLO_DEFAULT_MODEL_PATH,
@@ -32,7 +32,7 @@ MAX_IMAGE_DIMENSION = 1280
 
 
 def preprocess_image(image):
-    """Fix orientation and downscale large photos before detection."""
+    # Fix orientation and downscale large photos before detection.
     image = ImageOps.exif_transpose(image).convert("RGB")
     if max(image.size) > MAX_IMAGE_DIMENSION:
         image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.LANCZOS)
@@ -66,7 +66,7 @@ st.markdown(
 
     .block-container { padding-top: 2rem; padding-bottom: 2.5rem; max-width: 640px; }
 
-    /* tighten the default gap Streamlit puts between top-level blocks */
+    /* tighten default block gap */
     div[data-testid="stMainBlockContainer"] > div[data-testid="stVerticalBlock"] {
         gap: 0.85rem !important;
     }
@@ -82,8 +82,7 @@ st.markdown(
     .app-title { font-size: 1.5rem; font-weight: 700; color: #2b2620; line-height: 1.2; }
     .app-subtitle { color: #9c927e; font-size: 0.88rem; margin-top: 2px; }
 
-    /* ---- cards: a stVerticalBlock nested inside another one is one of our
-       explicit st.container(border=True) blocks; the page root isn't nested. ---- */
+    /* ---- card containers ---- */
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"] {
         background: #fffdf8; border-radius: 18px !important; border: 1px solid #e7dfcd !important;
         box-shadow: 0 1px 3px rgba(43, 38, 32, 0.05) !important; padding: 1.35rem 1.5rem !important;
@@ -185,7 +184,7 @@ with st.container(border=True):
     mode = mode or "User Mode"
 
     if mode == "User Mode":
-        algo = BEST_MODEL  # normal users only ever get the best-performing model
+        algo = BEST_MODEL  # best model only
         st.markdown(
             f'<div class="hint-text">Using <b>{algo}</b>, the best-performing model on our test set.</div>',
             unsafe_allow_html=True,
@@ -201,15 +200,15 @@ with st.container(border=True):
     threshold = st.slider("Confidence threshold", 0.0, 1.0, 0.5, 0.05, label_visibility="collapsed")
 
     if mode == "Developer Mode":
-        with st.expander("📊 Model comparison (test set: 96 images, 155 fruits)"):
+        with st.expander("📊 Model comparison (test set: 155 fruits)"):
             overall_df = pd.DataFrame(OVERALL_METRICS).T
             overall_df.index.name = "Model"
             display_df = overall_df.map(lambda v: "n/a" if pd.isna(v) else f"{v:.3f}")
             st.markdown("**Overall metrics**")
             st.dataframe(display_df, use_container_width=True)
             st.caption(
-                "SSD's Recall is COCO Average Recall (AR@[0.5:0.95]); pycocotools does not report a "
-                "single Precision figure the way Ultralytics does for YOLO."
+                "Precision/Recall are computed the same way for both models (IoU>=0.5 matching at a "
+                "0.5 confidence threshold, averaged across classes), so they're directly comparable."
             )
 
             st.markdown("**Per-class AP@0.5**")
@@ -228,34 +227,47 @@ with st.container(border=True):
         uploaded = st.camera_input("Take a photo", label_visibility="collapsed")
 
 if uploaded is not None:
-    image = preprocess_image(Image.open(uploaded))
-    image = enhance_image(image)
+    try:
+        image = preprocess_image(Image.open(uploaded))
+        image = enhance_image(image)
+    except Exception as e:
+        st.error(f"Couldn't read this image ({e}). Please try a different file.")
+        st.stop()
+
     st.image(image, caption="Input image", use_container_width=True)
 
     if st.button("Run detection"):
-        with st.spinner("Detecting..."):
-            if algo == "YOLOv8n":
-                model = get_yolo_model(YOLO_DEFAULT_MODEL_PATH)
-                image_bgr = np.array(image)[:, :, ::-1].copy()
-                results = model(image_bgr, conf=threshold, verbose=False)
-                boxes = results[0].boxes
-                annotated_bgr = draw_detections(image_bgr.copy(), boxes, model.names)
-                st.image(annotated_bgr[:, :, ::-1], caption="Detection result (YOLOv8n)", use_container_width=True)
+        detections = []
+        try:
+            with st.spinner("Detecting..."):
+                if algo == "YOLOv8n":
+                    model = get_yolo_model(YOLO_DEFAULT_MODEL_PATH)
+                    image_bgr = np.array(image)[:, :, ::-1].copy()
+                    results = model(image_bgr, conf=threshold, verbose=False)
+                    boxes = results[0].boxes
+                    annotated_bgr = draw_detections(image_bgr.copy(), boxes, model.names)
+                    st.image(annotated_bgr[:, :, ::-1], caption="Detection result (YOLOv8n)", use_container_width=True)
 
-                detections = [
-                    (model.names[int(box.cls[0].item())], float(box.conf[0].item()))
-                    for box in boxes
-                ]
-            else:
-                model, device = get_ssd_model(SSD_DEFAULT_CHECKPOINT)
-                boxes, labels, scores = predict_ssd(model, image, device, score_threshold=threshold)
-                annotated = draw_predictions(image, boxes, labels, scores)
-                st.image(annotated, caption="Detection result (SSD300-VGG16)", use_container_width=True)
+                    detections = [
+                        (model.names[int(box.cls[0].item())], float(box.conf[0].item()))
+                        for box in boxes
+                    ]
+                else:
+                    model, device = get_ssd_model(SSD_DEFAULT_CHECKPOINT)
+                    boxes, labels, scores = predict_ssd(model, image, device, score_threshold=threshold)
+                    annotated = draw_predictions(image, boxes, labels, scores)
+                    st.image(annotated, caption="Detection result (SSD300-VGG16)", use_container_width=True)
 
-                detections = [
-                    (CATEGORY_ID_TO_NAME.get(int(label.item()), f"id_{int(label.item())}"), float(score.item()))
-                    for label, score in zip(labels, scores)
-                ]
+                    detections = [
+                        (CATEGORY_ID_TO_NAME.get(int(label.item()), f"id_{int(label.item())}"), float(score.item()))
+                        for label, score in zip(labels, scores)
+                    ]
+        except FileNotFoundError as e:
+            st.error(f"Model file not found ({e}). Make sure the trained weights are in place before running detection.")
+            st.stop()
+        except Exception as e:
+            st.error(f"Detection failed: {e}")
+            st.stop()
 
         if not detections:
             st.info("No fruit detected.")

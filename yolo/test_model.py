@@ -1,13 +1,4 @@
-"""
-test_model.py
-
-Runs the trained YOLOv8 model on every image in the test folder as a batch,
-and saves the annotated (boxes + labels) results to a local folder for review.
-
-Usage:
-    python test_model.py
-    python test_model.py --confidence 0.3
-"""
+# Runs YOLOv8 on the test folder as a batch and saves annotated results.
 
 import argparse
 import os
@@ -15,8 +6,6 @@ import os
 from ultralytics import YOLO
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-# Default paths are computed relative to this file's location, so no code changes
-# are needed when switching computers or usernames
 DEFAULT_MODEL_PATH = os.path.join(
     SCRIPT_DIR, "..", "runs", "detect", "fruit_yolo", "fruit_freshness_v1", "weights", "best.pt"
 )
@@ -52,7 +41,7 @@ def main():
     results = model.predict(
         source=args.test_images_dir,
         conf=args.confidence,
-        save=True,        # automatically save the annotated result images
+        save=True,
         show_labels=True,
         show_conf=True,
     )
@@ -62,7 +51,7 @@ def main():
     print("Check the terminal output above for the exact save location")
     print('(usually something like: runs\\detect\\predict\\)')
 
-    # Print a detection summary for each image
+    # Per-image summary
     print("\n--- Detection Summary ---")
     for r in results:
         image_name = os.path.basename(r.path)
@@ -74,7 +63,7 @@ def main():
             for i, box in enumerate(r.boxes, start=1):
                 class_id = int(box.cls)
                 class_name = model.names[class_id]
-                confidence = float(box.conf) * 100  # convert to a percentage for readability
+                confidence = float(box.conf) * 100
                 print(f"   Fruit {i}: {class_name} — Confidence: {confidence:.1f}%")
 
 

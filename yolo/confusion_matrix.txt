@@ -1,0 +1,10 @@
+Confusion matrix (rows=Predicted, cols=True)
+
+                  Fresh Appl  Fresh Bana  Fresh Oran  Rotten Ban  Rotten Ora  Rotten App  background
+Fresh Apple               13           0           0           0           0           0           7
+Fresh Banana               0          13           0           0           0           0          12
+Fresh Orange               0           0          16           0           0           0           2
+Rotten Banana              0           0           0          58           0           0          17
+Rotten Orange              0           0           0           0          18           0           0
+Rotten Apple               0           0           0           0           0          24           0
+background                 3           4           2           4           0           0           0

@@ -7,7 +7,7 @@ Object detection and classification project: implemented with two algorithms, **
 ```
 ssd/            SSD300-VGG16 (torchvision) training/evaluation/inference
 yolo/           YOLOv8n (ultralytics) training/evaluation/inference
-camera/         Real-time camera detection demo (both models can be switched between)
+camera/         Streamlit web app: upload a photo or take one with the device camera (both models can be switched between)
 data/           Dataset (.gitignore, needs to be downloaded separately, see "Dataset" below)
 runs/           YOLO training outputs (weights, training curves, etc.)
 documentation/  Documentation draft, figures, and other assets for the written report
@@ -26,46 +26,43 @@ pip install -r requirements.txt
 
 ## Dataset
 
-Uses a public dataset from Roboflow (exported in YOLOv8 format):
+Uses a public dataset from Roboflow, exported twice in two different formats (one per model, since YOLOv8 needs YOLO-format `.txt` labels and SSD needs a COCO-format `_annotations.coco.json`):
 https://universe.roboflow.com/alrz-nt-wcyue/fresh-and-rotten-fruits-aa5ae/dataset/3
 
-After downloading, place it at:
 ```
-data/fresh and rotten fruits.v3i.yolov8/
-├── data.yaml
-├── train/images, train/labels
-├── valid/images, valid/labels
-└── test/images, test/labels
+data/
+├── Yolov8n/fresh and rotten fruits.v3i.yolov8/    (used by yolo/, camera/'s YOLO path)
+│   ├── data.yaml
+│   ├── train/images, train/labels
+│   ├── valid/images, valid/labels
+│   └── test/images, test/labels
+└── SSD/fresh and rotten fruits.v3i.coco/          (used by ssd/, camera/'s SSD path)
+    ├── train/ (images + _annotations.coco.json)
+    ├── valid/
+    └── test/
 ```
 
 6 classes: `Fresh Apple / Fresh Banana / Fresh Orange / Rotten Banana / Rotten Orange / Rotten Apple`
-
-**Note**: this Roboflow export only contains YOLO-format annotations (`labels/*.txt`), not the COCO json required by the SSD side. Before running the SSD scripts, run the following once:
-
-```
-cd ssd
-python build_coco_annotations.py --data-root "../data/fresh and rotten fruits.v3i.yolov8"
-```
-
-This regenerates each split's `_annotations.coco.json` from the YOLO labels (only needs to be run once, unless the dataset is updated to a new version).
 
 ## SSD (`ssd/`)
 
 ```
 cd ssd
 
-# 1. Generate COCO annotations (before the first run, see "Dataset" above)
-python build_coco_annotations.py --data-root "../data/fresh and rotten fruits.v3i.yolov8"
+# 1. Train
+python train.py --data-root "../data/SSD/fresh and rotten fruits.v3i.coco" --epochs 10
 
-# 2. Train
-python train.py --data-root "../data/fresh and rotten fruits.v3i.yolov8" --epochs 10
+# 2. Evaluate on the test set (outputs mAP / per-class AP to the console and eval_results.txt if redirected)
+python evaluate.py --data-root "../data/SSD/fresh and rotten fruits.v3i.coco" --checkpoint ssd_fruit_model.pth
 
-# 3. Evaluate on the test set (outputs mAP / per-class AP)
-python evaluate.py --data-root "../data/fresh and rotten fruits.v3i.yolov8" --checkpoint ssd_fruit_model.pth
+# 3. Generate the confusion matrix (saved as confusion_matrix.png)
+python confusion_matrix.py --data-root "../data/SSD/fresh and rotten fruits.v3i.coco" --checkpoint ssd_fruit_model.pth
 
 # 4. Run inference on a single image
-python inference.py --image "../data/fresh and rotten fruits.v3i.yolov8/test/images/xxx.jpg" --checkpoint ssd_fruit_model.pth
+python inference.py --image "../data/SSD/fresh and rotten fruits.v3i.coco/test/xxx.jpg" --checkpoint ssd_fruit_model.pth
 ```
+
+> The console scripts print Chinese status messages; if redirecting output to a file on Windows and the text comes out garbled, run with `PYTHONIOENCODING=utf-8` set first (e.g. `set PYTHONIOENCODING=utf-8` on cmd, or prefix the command on Git Bash/PowerShell).
 
 Pretrained weights: `ssd/ssd_fruit_model.pth` (already included in the repo, so you can skip training and go straight to evaluation/inference).
 
@@ -78,6 +75,12 @@ cd yolo
 # need changing between computers; --data-yaml is only needed if the dataset is not in the default location)
 python train_yolo_fruit.py
 
+# Evaluate on the test set (outputs mAP / per-class AP, saved to eval_results.txt)
+python evaluate.py
+
+# Generate the confusion matrix (saved as confusion_matrix.png + confusion_matrix.txt)
+python confusion_matrix.py
+
 # Batch inference on the whole test folder, result images saved to runs/detect/predict/
 python test_model.py
 python test_model.py --confidence 0.3       # lower the threshold on the spot to check for missed detections
@@ -86,33 +89,13 @@ python test_model.py --confidence 0.3       # lower the threshold on the spot to
 python visualize_dataset.py --split test --num-samples 10
 ```
 
-Evaluate on the test set (using Ultralytics' built-in `val`):
-
-```python
-from ultralytics import YOLO
-model = YOLO("runs/detect/fruit_yolo/fruit_freshness_v1/weights/best.pt")
-model.val(data="data/fresh and rotten fruits.v3i.yolov8/data.yaml", split="test")
-```
-
 Pretrained weights: `runs/detect/fruit_yolo/fruit_freshness_v1/weights/best.pt`.
 
 All path arguments in the scripts under `yolo/` (`--data-yaml`, `--model-path`, etc.) default to relative paths computed from each script's own location, so under normal circumstances no code changes are needed between computers or usernames. Manually overriding them is only needed if the dataset or model weights are stored in a different location from the repository structure.
 
-## Real-time camera demo (`camera/`)
+## Web UI (`camera/streamlit_app.py`)
 
-```
-cd camera
-python camera_app.py --model ssd     # or --model yolo
-
-# Additional arguments supported on the YOLO side (passed through to camera_app_yolo.py):
-python camera_app.py --model yolo --threshold 0.3    # lower the threshold on the spot to check for missed detections
-```
-
-`camera_app.py` is the unified entry point, dispatching to `camera_app_ssd.py` / `camera_app_yolo.py` based on the `--model` argument. Their dependencies (torchvision vs ultralytics) are kept independent, so both environments don't need to be installed at once to run either one.
-
-## Web UI demo (`camera/streamlit_app.py`)
-
-A Streamlit page as an alternative to the live camera feed above: upload a photo (or take one with your device camera), pick SSD300-VGG16 or YOLOv8n, and view the detection result with bounding boxes and per-detection confidence scores.
+A Streamlit page: upload a photo, or take one with your device's camera (this satisfies the "real-time camera" requirement without needing a separate continuous-video pipeline), pick SSD300-VGG16 or YOLOv8n, and view the detection result with bounding boxes and per-detection confidence scores.
 
 ```
 cd camera
@@ -123,14 +106,18 @@ Needs both `ssd/ssd_fruit_model.pth` and the trained YOLO weights (`runs/detect/
 
 ## Results comparison
 
-Evaluation results, per-class AP, and a brief analysis for both models on the same 96-image test set are in [`comparison_results.md`](comparison_results.md). Raw evaluation logs: `ssd/eval_results.txt`, `yolo/eval_results.txt`.
+Evaluation results, per-class AP, and a brief analysis for both models on the same test set (155 annotated fruits; SSD's COCO-format export has 93 images, YOLO's YOLO-format export has 96 images — same underlying dataset, same GT instance counts per class) are in [`comparison_results.md`](comparison_results.md). Raw evaluation logs: `ssd/eval_results.txt`, `yolo/eval_results.txt`. Confusion matrices: `ssd/confusion_matrix.png`, `yolo/confusion_matrix.png` (+ `yolo/confusion_matrix.txt` for the raw numbers).
 
 | Metric | SSD300-VGG16 | YOLOv8n |
 |---|---|---|
-| mAP@0.5 | 0.919 | 0.924 |
-| mAP@[0.5:0.95] | 0.675 | 0.674 |
+| mAP@0.5 | 0.920 | 0.924 |
+| mAP@[0.5:0.95] | 0.688 | 0.674 |
+| mAP@0.75 | 0.768 | 0.694 |
+| Precision (mean) | 0.911 | 0.899 |
+| Recall (mean) | 0.906 | 0.849 |
 
 ## Troubleshooting
 
-- **`evaluate.py` / `inference.py` hangs downloading pretrained weights, or reports an SSL certificate error**: these two scripts load a trained checkpoint, so there is no need to download torchvision's official pretrained weights. This is already skipped in `model.py` via `pretrained=False`. If the issue persists, check whether the place calling `get_model()` is passing `pretrained=False`.
+- **`get_model()` (in `ssd/model.py`) fails or hangs on first run**: it downloads torchvision's ImageNet-pretrained SSD300-VGG16 backbone weights the first time it's called, so it needs internet access. This only affects the backbone init; `evaluate.py`/`inference.py` immediately overwrite it with your trained checkpoint, so it has no effect on results — it just needs to succeed once (subsequent runs use torch's local cache).
 - **`ModuleNotFoundError: No module named 'pycocotools'` / `'ultralytics'` / `'yaml'`**: make sure `pip install -r requirements.txt` was run inside the `venv`.
+- **Garbled/mojibake console output when redirecting a `ssd/` script's output to a file on Windows**: those scripts print Chinese status text; set `PYTHONIOENCODING=utf-8` before running (see the SSD section above).

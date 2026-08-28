@@ -1,14 +1,4 @@
-"""
-visualize_dataset.py
-
-Randomly samples a few images from the YOLO-format training data and draws
-their annotation boxes and class names, for manually checking that the
-annotations (box position, class match) are correct.
-
-Usage:
-    python visualize_dataset.py
-    python visualize_dataset.py --split test --num-samples 10
-"""
+# Samples YOLO-format training images and draws their annotation boxes for a manual check.
 
 import argparse
 import os
@@ -20,8 +10,6 @@ import matplotlib.patches as patches
 from PIL import Image
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-# Default path is computed relative to this file's location, so no code changes
-# are needed when switching computers or usernames
 DEFAULT_DATA_YAML = os.path.join(
     SCRIPT_DIR, "..", "data", "fresh and rotten fruits.v3i.yolov8", "data.yaml"
 )
@@ -75,7 +63,7 @@ def visualize_samples(pairs, class_names, num_samples=6):
             class_id = int(parts[0])
             x_center, y_center, box_w, box_h = map(float, parts[1:])
 
-            # YOLO format uses normalised coordinates (0-1), need to convert to actual pixel coordinates
+            # normalized -> pixel coords
             xmin = (x_center - box_w / 2) * img_w
             ymin = (y_center - box_h / 2) * img_h
             width = box_w * img_w
@@ -97,7 +85,6 @@ def visualize_samples(pairs, class_names, num_samples=6):
         ax.set_title(os.path.basename(img_path))
         ax.axis("off")
 
-    # hide any unused empty subplots
     for ax in axes[len(samples):]:
         ax.axis("off")
 

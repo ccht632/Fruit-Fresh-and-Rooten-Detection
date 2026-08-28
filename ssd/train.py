@@ -1,4 +1,5 @@
 import argparse
+import os
 import time
 
 import torch
@@ -8,11 +9,7 @@ from dataset import FruitDataset, get_transform, collate_fn, NUM_CLASSES, get_mu
 from model import get_model
 
 
-# "多水果同框"图片(如apple+banana+orange同框)在train set里占比很低(~2%)，
-# 且几乎都来自同一批底图的翻转/旋转复制。diagnose发现这类稀有场景正是
-# apple/orange同框互相误检、三果同框banana检测差这两个问题的共同根因之一，
-# 用WeightedRandomSampler对它们做适度过采样，让模型每个epoch多看几次。
-# 倍数保守设置(5倍)，避免在这批底图数量本就很少(~12张)的样本上过拟合。
+# Oversample rare multi-fruit images
 MULTI_FRUIT_OVERSAMPLE_WEIGHT = 5.0
 
 
@@ -109,14 +106,23 @@ def main():
     parser.add_argument("--output", type=str, default="ssd_fruit_model.pth")
     args = parser.parse_args()
 
+    if not os.path.isdir(args.data_root):
+        print(f"ERROR: data root not found: {args.data_root}")
+        print("Use --data-root to point to the folder containing train/valid/test subfolders")
+        return
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Use Device: {device}")
     if args.subset:
         print(f"Small scale testing mode: using only the first {args.subset} images")
 
-    train_loader, valid_loader = get_dataloaders(
-        args.data_root, args.batch_size, subset=args.subset
-    )
+    try:
+        train_loader, valid_loader = get_dataloaders(
+            args.data_root, args.batch_size, subset=args.subset
+        )
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}")
+        return
     print(f"Training batch size: {len(train_loader)}  Validate batch number: {len(valid_loader)}")
 
     model = get_model(num_classes=NUM_CLASSES)

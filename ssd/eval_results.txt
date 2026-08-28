@@ -1,0 +1,60 @@
+Device: cpu
+loading annotations into memory...
+Done (t=0.00s)
+creating index...
+index created!
+Test set size: 93
+Running inference...
+Generated 405 predictions
+Loading and preparing results...
+DONE (t=0.00s)
+creating index...
+index created!
+Running per image evaluation...
+Evaluate annotation type *bbox*
+DONE (t=0.05s).
+Accumulating evaluation results...
+DONE (t=0.03s).
+
+===== Overall evaluation =====
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.688
+ Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.920
+ Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.768
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = -1.000
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.092
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.691
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.589
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.738
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.740
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = -1.000
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.150
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.742
+
+Per-class AP:
+Class             AP@[.5:.95]    AP@0.5
+Fresh Apple       0.623          0.873
+Fresh Banana      0.449          0.794
+Fresh Orange      0.698          0.994
+Rotten Banana     0.487          0.860
+Rotten Orange     0.932          1.000
+Rotten Apple      0.941          1.000
+
+Computing Precision/Recall (threshold=0.5)...
+
+==================================================
+Summary table
+==================================================
+Metric              Value
+mAP@0.5             0.920
+mAP@[0.5:0.95]      0.688
+mAP@0.75            0.768
+Precision, mean     0.911
+Recall, mean        0.906
+
+Class             AP@0.5      AP@[0.5:0.95]
+Fresh Apple       0.873       0.623
+Fresh Banana      0.794       0.449
+Fresh Orange      0.994       0.698
+Rotten Banana     0.860       0.487
+Rotten Orange     1.000       0.932
+Rotten Apple      1.000       0.941

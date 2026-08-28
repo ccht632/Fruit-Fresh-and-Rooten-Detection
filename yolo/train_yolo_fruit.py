@@ -1,26 +1,10 @@
-"""
-train_yolo_fruit.py
-
-Trains a YOLOv8 model to detect fruit freshness/rottenness.
-This version is meant to be run locally in VS Code (CPU or local GPU), and
-includes several measures to reduce overfitting.
-
-Usage:
-    1. Make sure the dataset folder (containing data.yaml) is already in the project
-    2. Run this script
-
-Run:
-    python train_yolo_fruit.py
-    python train_yolo_fruit.py --data-yaml "D:\\xxx\\data.yaml"   # specify if the dataset is not in the default location
-"""
+# Trains a YOLOv8 model to detect fruit freshness/rottenness.
 
 import argparse
 import os
 from ultralytics import YOLO
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-# Default path is computed relative to this file's location (yolo/ and data/ are sibling folders),
-# so no code changes are needed when switching computers or usernames
 DEFAULT_DATA_YAML = os.path.join(
     SCRIPT_DIR, "..", "data", "fresh and rotten fruits.v3i.yolov8", "data.yaml"
 )
@@ -34,7 +18,7 @@ def train(data_yaml, epochs, img_size, batch_size, project_name, run_name):
             f"or use --data-yaml to point to the actual path"
         )
 
-    model = YOLO("yolov8n.pt")  # start from pretrained weights, faster and less prone to overfitting than training from scratch
+    model = YOLO("yolov8n.pt")  # pretrained start
 
     results = model.train(
         data=data_yaml,
@@ -44,23 +28,23 @@ def train(data_yaml, epochs, img_size, batch_size, project_name, run_name):
         project=project_name,
         name=run_name,
 
-        # ---- overfitting-prevention settings ----
-        patience=20,             # early stopping: stop automatically after 20 epochs with no improvement, to stop the model from "memorising" the training set
-        dropout=0.2,              # dropout: randomly drop some neurons during training, forcing the model to learn general patterns rather than memorising details
-        weight_decay=0.0005,      # weight decay: penalises overly large weights, reducing overfitting to the training data
+        # Overfitting prevention
+        patience=20,
+        dropout=0.2,
+        weight_decay=0.0005,
 
-        # ---- data augmentation (further reduces overfitting risk by exposing the model to more variation) ----
-        hsv_h=0.015,               # random hue jitter
-        hsv_s=0.7,                 # random saturation jitter (freshness/rottenness relies heavily on colour, so this is kept but not too strong, to avoid distorting the key fresh/rotten colour cue)
-        hsv_v=0.4,                 # random brightness jitter
-        fliplr=0.5,                 # 50% chance of horizontal flip
-        flipud=0.0,                 # no vertical flip (fruit is not normally placed upside down, so this is unnecessary)
-        degrees=15,                 # random rotation angle (matches the +/-15 degree augmentation already present in the dataset)
-        translate=0.1,               # random translation
-        scale=0.5,                   # random scaling
+        # Data augmentation
+        hsv_h=0.015,
+        hsv_s=0.7,                 # kept mild to preserve fresh/rotten color cue
+        hsv_v=0.4,
+        fliplr=0.5,
+        flipud=0.0,                 # fruit orientation is never upside down
+        degrees=15,
+        translate=0.1,
+        scale=0.5,
 
         save=True,
-        save_period=5,               # save a checkpoint every 5 epochs, so progress is not lost if something goes wrong mid-training
+        save_period=5,
     )
 
     print("Training done.")
