@@ -207,8 +207,9 @@ with st.container(border=True):
             st.markdown("**Overall metrics**")
             st.dataframe(display_df, use_container_width=True)
             st.caption(
-                "Precision/Recall are computed the same way for both models (IoU>=0.5 matching at a "
-                "0.5 confidence threshold, averaged across classes), so they're directly comparable."
+                "SSD300-VGG16's Precision/Recall are computed at a 0.25 confidence threshold; "
+                "YOLOv8n's come from Ultralytics' own per-class best-F1 threshold, so the two are not "
+                "computed the same way."
             )
 
             st.markdown("**Per-class AP@0.5**")

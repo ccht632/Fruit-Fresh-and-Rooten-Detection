@@ -14,7 +14,7 @@ Running per image evaluation...
 Evaluate annotation type *bbox*
 DONE (t=0.05s).
 Accumulating evaluation results...
-DONE (t=0.03s).
+DONE (t=0.02s).
 
 ===== Overall evaluation =====
  Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.688
@@ -39,7 +39,7 @@ Rotten Banana     0.487          0.860
 Rotten Orange     0.932          1.000
 Rotten Apple      0.941          1.000
 
-Computing Precision/Recall (threshold=0.5)...
+Computing Precision/Recall (threshold=0.25)...
 
 ==================================================
 Summary table
@@ -48,8 +48,8 @@ Metric              Value
 mAP@0.5             0.920
 mAP@[0.5:0.95]      0.688
 mAP@0.75            0.768
-Precision, mean     0.911
-Recall, mean        0.906
+Precision, mean     0.885
+Recall, mean        0.934
 
 Class             AP@0.5      AP@[0.5:0.95]
 Fresh Apple       0.873       0.623

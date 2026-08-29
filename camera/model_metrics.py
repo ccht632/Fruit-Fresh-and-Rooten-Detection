@@ -1,4 +1,4 @@
-# Static eval results for developer-mode comparison view. P/R computed identically for both models.
+# Static eval results for developer-mode comparison view.
 
 BEST_MODEL = "SSD300-VGG16"
 
@@ -14,8 +14,8 @@ OVERALL_METRICS = {
         "mAP@0.5": 0.920,
         "mAP@[0.5:0.95]": 0.688,
         "mAP@0.75": 0.768,
-        "Precision": 0.911,
-        "Recall": 0.906,
+        "Precision": 0.885,
+        "Recall": 0.934,
     },
 }
 

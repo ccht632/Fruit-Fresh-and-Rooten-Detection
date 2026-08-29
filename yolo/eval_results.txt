@@ -25,4 +25,4 @@ Rotten Banana     0.921       0.498
 Rotten Orange     0.995       0.902
 Rotten Apple      0.995       0.932
 
-Speed: 1.0ms preprocess, 66.0ms inference, 0.0ms loss, 0.3ms postprocess per image (67.3ms total)
+Speed: 1.1ms preprocess, 77.6ms inference, 0.0ms loss, 0.8ms postprocess per image (79.5ms total)

@@ -113,8 +113,10 @@ Evaluation results, per-class AP, and a brief analysis for both models on the sa
 | mAP@0.5 | 0.920 | 0.924 |
 | mAP@[0.5:0.95] | 0.688 | 0.674 |
 | mAP@0.75 | 0.768 | 0.694 |
-| Precision (mean) | 0.911 | 0.899 |
-| Recall (mean) | 0.906 | 0.849 |
+| Precision (mean) | 0.885 | 0.899 |
+| Recall (mean) | 0.934 | 0.849 |
+
+SSD's Precision/Recall are computed at a fixed 0.25 confidence threshold; YOLOv8n's come from Ultralytics' own per-class best-F1 threshold, so the two are not computed the same way and should not be compared directly. See [`comparison_results.md`](comparison_results.md) for a fair per-class comparison.
 
 ## Troubleshooting
 
