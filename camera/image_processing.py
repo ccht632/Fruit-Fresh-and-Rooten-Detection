@@ -2,7 +2,17 @@
 
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
+
+MAX_IMAGE_DIMENSION = 1280
+
+
+def preprocess_image(image: Image.Image) -> Image.Image:
+    # Fix orientation and downscale large photos before detection.
+    image = ImageOps.exif_transpose(image).convert("RGB")
+    if max(image.size) > MAX_IMAGE_DIMENSION:
+        image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.LANCZOS)
+    return image
 
 
 def denoise(image: Image.Image) -> Image.Image:

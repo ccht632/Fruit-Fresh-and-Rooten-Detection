@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import torch
-from PIL import Image, ImageOps
+from PIL import Image
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -23,20 +23,10 @@ from yolo_inference import (  # noqa: E402
     draw_detections,
     DEFAULT_MODEL_PATH as YOLO_DEFAULT_MODEL_PATH,
 )
-from image_processing import enhance_image  # noqa: E402
+from image_processing import enhance_image, preprocess_image  # noqa: E402
 from model_metrics import BEST_MODEL, OVERALL_METRICS, PER_CLASS_AP50  # noqa: E402
 
 SSD_DEFAULT_CHECKPOINT = os.path.join(SCRIPT_DIR, "..", "ssd", "ssd_fruit_model.pth")
-
-MAX_IMAGE_DIMENSION = 1280
-
-
-def preprocess_image(image):
-    # Fix orientation and downscale large photos before detection.
-    image = ImageOps.exif_transpose(image).convert("RGB")
-    if max(image.size) > MAX_IMAGE_DIMENSION:
-        image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.LANCZOS)
-    return image
 
 
 @st.cache_resource(show_spinner=False)
