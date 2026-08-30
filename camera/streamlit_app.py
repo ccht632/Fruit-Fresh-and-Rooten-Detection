@@ -11,20 +11,19 @@ from PIL import Image
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# ssd/ is a sibling folder
 SSD_DIR = os.path.join(SCRIPT_DIR, "..", "ssd")
 sys.path.insert(0, SSD_DIR)
 
-from inference import load_model as load_ssd_model, predict_image as predict_ssd, draw_predictions  # noqa: E402
-from dataset import CATEGORY_ID_TO_NAME  # noqa: E402
+from inference import load_model as load_ssd_model, predict_image as predict_ssd, draw_predictions 
+from dataset import CATEGORY_ID_TO_NAME  
 
-from yolo_inference import (  # noqa: E402
+from yolo_inference import (  
     load_model as load_yolo_model,
     draw_detections,
     DEFAULT_MODEL_PATH as YOLO_DEFAULT_MODEL_PATH,
 )
-from image_processing import enhance_image, preprocess_image  # noqa: E402
-from model_metrics import BEST_MODEL, OVERALL_METRICS, PER_CLASS_AP50  # noqa: E402
+from image_processing import enhance_image, preprocess_image  
+from model_metrics import BEST_MODEL, OVERALL_METRICS, PER_CLASS_AP50 
 
 SSD_DEFAULT_CHECKPOINT = os.path.join(SCRIPT_DIR, "..", "ssd", "ssd_fruit_model.pth")
 
@@ -63,6 +62,20 @@ st.markdown(
 
     /* ---- header ---- */
     .app-header { display: flex; align-items: center; gap: 14px; margin-bottom: 0.4rem; }
+
+    .st-key-mode_toggle {
+        position: fixed !important; top: 1.4rem; right: 1.8rem; z-index: 999; width: auto !important;
+    }
+    .st-key-mode_toggle div[data-testid="stButtonGroup"] div[role="radiogroup"] {
+        width: auto !important; padding: 3px; background: #ede5d3;
+        box-shadow: 0 1px 4px rgba(43, 38, 32, 0.1);
+    }
+    .st-key-mode_toggle div[data-testid="stButtonGroup"] button[data-variant="segmented_control"] {
+        flex: 0 0 auto !important; padding: 0.3rem 0.7rem !important;
+    }
+    .st-key-mode_toggle div[data-testid="stButtonGroup"] button[data-variant="segmented_control"] p {
+        font-size: 0.78rem !important; white-space: nowrap;
+    }
     .app-icon {
         width: 46px; height: 46px; border-radius: 14px; flex-shrink: 0;
         background: linear-gradient(135deg, #8ba077, #5f7a52);
@@ -92,7 +105,7 @@ st.markdown(
     .hint-text { color: #9c927e; font-size: 0.82rem; margin: 0; }
 
     /* ---- segmented control ---- */
-    div[data-testid="stElementContainer"]:has(div[data-testid="stButtonGroup"]) { width: 100% !important; }
+    div[data-testid="stElementContainer"]:has(div[data-testid="stButtonGroup"]):not(.st-key-mode_toggle) { width: 100% !important; }
     div[data-testid="stButtonGroup"] { width: 100%; }
     div[data-testid="stButtonGroup"] div[role="radiogroup"] {
         background: #ede5d3; border-radius: 12px; padding: 4px; gap: 0 !important;
@@ -166,13 +179,16 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-with st.container(border=True):
-    st.markdown('<div class="field-label">MODE</div>', unsafe_allow_html=True)
-    mode = st.segmented_control(
-        "Mode", ["User Mode", "Developer Mode"], default="User Mode", label_visibility="collapsed"
-    )
-    mode = mode or "User Mode"
+mode = st.segmented_control(
+    "Mode",
+    ["User Mode", "Developer Mode"],
+    default="User Mode",
+    label_visibility="collapsed",
+    key="mode_toggle",
+)
+mode = mode or "User Mode"
 
+with st.container(border=True):
     if mode == "User Mode":
         algo = BEST_MODEL  # best model only
         st.markdown(
